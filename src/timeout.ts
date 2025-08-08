@@ -1,5 +1,6 @@
-export const timeout: <T>(millis: number | "INFINITELY", f: (done: () => boolean) => Promise<T>) => Promise<T> = (millies, f) => {
+class InternalTimeout {}
 
+export const timeout: <T>(millis: number | "INFINITELY", f: (done: () => boolean) => Promise<T>) => Promise<T> = async (millies, f) => {
     if (millies === "INFINITELY"){
         return f(() => false)
     }
@@ -7,25 +8,30 @@ export const timeout: <T>(millis: number | "INFINITELY", f: (done: () => boolean
     let done = false;
     const doneF = () => done;
 
-    return new Promise((resolve, reject) => {
+    let timeoutRef;
+    let result;
 
-        const timeoutRef = setTimeout(() => {
-            done = true;
-            reject(new Error("Timeout after " + millies + "ms"));
-        }, millies);
+    try {
+        result = await Promise.race([
+            f(doneF),
 
-        const result = f(doneF);
-        // result.finally(() => clearTimeout(timeoutRef));
+            new Promise<InternalTimeout>((resolve) => {
+                timeoutRef = setTimeout(() => {
+                    done = true
+                    resolve(new InternalTimeout())
+                }, millies)
+            }),
+        ]);
+    } catch (err) {
+        clearTimeout(timeoutRef);
+        throw err;
+    }
 
-        result.then(
-            r => {
-                resolve(r);
-                clearTimeout(timeoutRef);
-            },
-            e => {
-                reject(e);
-                clearTimeout(timeoutRef);
-            }
-        );
-    });
+    if (result instanceof InternalTimeout) {
+        throw new Error(`Timeout after ${millies}ms`);
+    }
+
+    clearTimeout(timeoutRef);
+
+    return result;
 };

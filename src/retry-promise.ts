@@ -163,16 +163,7 @@ export class RetryError extends Error {
 }
 
 // tslint:disable-next-line:max-classes-per-file
-class BaseError {
-    constructor (public message?: string, ...args: unknown[]) {
-        Error.apply(this, args as any);
-    }
-}
-
-BaseError.prototype = new Error();
-
-// tslint:disable-next-line:max-classes-per-file
-export class NotRetryableError extends BaseError {
+export class NotRetryableError extends Error {
     constructor(message?: string) {
         super(message);
         Object.defineProperty(this, 'name', { value: this.constructor.name })

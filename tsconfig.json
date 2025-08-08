@@ -5,12 +5,8 @@
     "strict": true,
     "sourceMap": true,
     "declaration": true,
-    "target": "es5",
-    "outDir": "dist",
-    "lib": [
-      "es2015",
-      "es6"
-    ]
+    "target": "esnext",
+    "outDir": "dist"
   },
   "include": [
     "src/**/*"

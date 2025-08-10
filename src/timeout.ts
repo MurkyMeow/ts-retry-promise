@@ -1,4 +1,4 @@
-class InternalTimeout {}
+const INTERNAL_TIMEOUT: unique symbol = {} as any;
 
 export const timeout: <T>(millis: number | "INFINITELY", f: (done: () => boolean) => Promise<T>) => Promise<T> = async (millies, f) => {
     if (millies === "INFINITELY"){
@@ -15,10 +15,10 @@ export const timeout: <T>(millis: number | "INFINITELY", f: (done: () => boolean
         result = await Promise.race([
             f(doneF),
 
-            new Promise<InternalTimeout>((resolve) => {
+            new Promise<typeof INTERNAL_TIMEOUT>((resolve) => {
                 timeoutRef = setTimeout(() => {
                     done = true
-                    resolve(new InternalTimeout())
+                    resolve(INTERNAL_TIMEOUT)
                 }, millies)
             }),
         ]);
@@ -27,7 +27,7 @@ export const timeout: <T>(millis: number | "INFINITELY", f: (done: () => boolean
         throw err;
     }
 
-    if (result instanceof InternalTimeout) {
+    if (result === INTERNAL_TIMEOUT) {
         throw new Error(`Timeout after ${millies}ms`);
     }
 

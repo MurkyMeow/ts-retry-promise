@@ -158,7 +158,9 @@ async function _retry<T>(f: () => Promise<T>, config: RetryConfig<T>, done: () =
                 return result;
             }
             config.logger("Until condition not met by " + result);
-        } catch (error: any) {
+        } catch (_error) {
+            const error = _error as any
+
             if (!config.retryIf(error)) {
                 throw error;
             }

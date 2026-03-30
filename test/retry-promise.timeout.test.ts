@@ -59,4 +59,21 @@ describe("Timeout tests", () => {
 
         await expectation;
     });
+
+    it("includes the last retry error when the overall timeout is reached", async () => {
+        const timeoutResult = retry(async () => {
+            await wait(100);
+            throw new Error("expected failure");
+        }, {
+            delay: 10,
+            retries: "INFINITELY",
+            timeout: 250,
+        });
+
+        const expectation = expect(timeoutResult).to.be.rejectedWith("Timeout after 250ms. Last error: Error: expected failure");
+
+        await mockClock.tickAsync(500);
+
+        await expectation;
+    });
 });

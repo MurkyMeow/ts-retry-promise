@@ -1,7 +1,5 @@
 "use strict"
 
-import {timeout} from "./timeout";
-
 export interface RetryConfig<T = any> {
     /**
      * number of maximal retry attempts
@@ -72,7 +70,41 @@ export async function wait(ms: number): Promise<void> {
 
 export async function retry<T>(f: () => Promise<T>, config?: Partial<RetryConfig<T>>): Promise<T> {
     const effectiveConfig: RetryConfig<T> = Object.assign({}, defaultRetryConfig, config) as RetryConfig<T>;
-    return timeout(effectiveConfig.timeout, (done) => _retry(f, effectiveConfig, done));
+
+    if (effectiveConfig.timeout === "INFINITELY") {
+        return _retry(f, effectiveConfig, () => false);
+    }
+    const timeoutMillis = effectiveConfig.timeout;
+
+    let done = false;
+    let timeoutRef: ReturnType<typeof setTimeout>;
+    let lastError: Error | undefined;
+
+    let result: T | typeof INTERNAL_TIMEOUT;
+    try {
+        result = await Promise.race<T | typeof INTERNAL_TIMEOUT>([
+            _retry(f, effectiveConfig, () => done, (error) => {
+                lastError = error;
+            }),
+            new Promise<typeof INTERNAL_TIMEOUT>((resolve) => {
+                timeoutRef = setTimeout(() => {
+                    done = true;
+                    resolve(INTERNAL_TIMEOUT);
+                }, timeoutMillis);
+            }),
+        ]);
+    } finally {
+        clearTimeout(timeoutRef!);
+    }
+
+    if (result === INTERNAL_TIMEOUT) {
+        if (lastError) {
+            throw new RetryError(`Timeout after ${timeoutMillis}ms. Last error: ${lastError}`, lastError);
+        }
+        throw new Error(`Timeout after ${timeoutMillis}ms`);
+    }
+
+    return result;
 }
 
 export function retryDecorator<T, F extends (...args: any[]) => Promise<T>>(func: F, config?: Partial<RetryConfig<T>>): (...funcArgs: Parameters<F>) => ReturnType<F> {
@@ -91,7 +123,9 @@ export function customizeRetry<T>(customConfig: Partial<RetryConfig<T>>): (f: ()
     };
 }
 
-async function _retry<T>(f: () => Promise<T>, config: RetryConfig<T>, done: () => boolean): Promise<T> {
+const INTERNAL_TIMEOUT: unique symbol = {} as any;
+
+async function _retry<T>(f: () => Promise<T>, config: RetryConfig<T>, done: () => boolean, onError?: (error: Error) => void): Promise<T> {
     let lastError: Error;
 
     let delay: (attempt: number, delay: number) => number;
@@ -124,7 +158,7 @@ async function _retry<T>(f: () => Promise<T>, config: RetryConfig<T>, done: () =
                 return result;
             }
             config.logger("Until condition not met by " + result);
-        } catch (error) {
+        } catch (error: any) {
             if (!config.retryIf(error)) {
                 throw error;
             }
@@ -136,6 +170,9 @@ async function _retry<T>(f: () => Promise<T>, config: RetryConfig<T>, done: () =
                 )
             }
             lastError = error;
+            if (onError) {
+                onError(error);
+            }
             config.logger("Retry failed: " + error.message);
         }
         const millisToWait = delay(i + 1, config.delay);
@@ -169,5 +206,3 @@ export class NotRetryableError extends Error {
         Object.defineProperty(this, 'name', { value: this.constructor.name })
     }
 }
-
-
